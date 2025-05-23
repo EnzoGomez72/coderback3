@@ -2,6 +2,8 @@ import express from 'express';
 import config from "./config/env.js"
 import cookieParser from 'cookie-parser';
 import connectDb from "./config/database.js";
+import swaggerUI from "swagger-ui-express";
+import swaggerDocument from './swagger.json' assert { type: 'json' };
 
 import usersRouter from './routes/users.router.js';
 import petsRouter from './routes/pets.router.js';
@@ -22,15 +24,13 @@ app.use('/api/pets',petsRouter);
 app.use('/api/adoptions',adoptionsRouter);
 app.use('/api/sessions',sessionsRouter);
 app.use('/api/mocks', mocksRouter);
+app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerDocument));
 
 connectDb();
-/*connectDb(config.mongodb_url);
-app.listen(app.get("PORT"), () => {
-    console.log(`Server on port ${app.get("PORT")}`);
-});*/
+
 
 app.listen(app.get("PORT"), () => {
     console.log(`🚀 Server running on port ${app.get("PORT")}`);
 });
 
-/*app.listen(PORT,()=>console.log(`Listening on ${PORT}`))*/
+export default app;
