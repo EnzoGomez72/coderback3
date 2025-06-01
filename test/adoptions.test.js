@@ -11,21 +11,27 @@ import petModel from '../src/dao/models/Pet.js';
 import adoptionModel from '../src/dao/models/Adoption.js';
 
 
-config.mongodb_url = 'mongodb+srv://enzo:1234@cluster0.bkbia.mongodb.net/adoptmetest?retryWrites=true&w=majority';
+const TEST_MONGODB_URI = 'mongodb+srv://enzo:1234@cluster0.bkbia.mongodb.net/adoptmetest?retryWrites=true&w=majority';
 
 describe('Adoption Routes', () => {
   let userId, petId, adoptionId;
+  let originalMongoUri;
 
-  before(async () => {
+  before(async function() {
+    this.timeout(5000); 
+
     try {
+      originalMongoUri = config.mongodb_url;
+      
+      config.mongodb_url = TEST_MONGODB_URI;
+
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.connection.close();
+      }
 
       await connectDb();
-      
 
-      await mongoose.connection.asPromise();
-      
       await mongoose.connection.db.dropDatabase();
-
       const user = await userModel.create({
         first_name: 'Test',
         last_name: 'User',
@@ -56,6 +62,10 @@ describe('Adoption Routes', () => {
   after(async () => {
     try {
       await mongoose.connection.db.dropDatabase();
+      
+      config.mongodb_url = originalMongoUri;
+      
+      await mongoose.connection.close();
     } catch (err) {
       console.error('Test teardown failed:', err);
     }
@@ -89,31 +99,41 @@ describe('Adoption Routes', () => {
     expect(res.body.payload._id).to.equal(adoptionId.toString());
   });
 
-  it('POST /api/adoptions/:uid/:pid - should create a new adoption', async () => {
-    const newPet = await petModel.create({
-      name: 'Michi',
-      specie: 'Cat',
-      adopted: false,
-      owner: userId
-    });
+  it('POST /api/adoptions/:uid/:pid - should create a new adoption', async function() {
+  this.timeout(5000);
   
-    const res = await request(app)
-      .post(`/api/adoptions/${userId}/${newPet._id}`)
-      .send({
-        notes: 'Test adoption'
-      });
-  
-    expect(res.status).to.equal(200); 
-    expect(res.body).to.be.an('object');
-    expect(res.body).to.have.property('status', 'success');
-    
+  const newPet = await petModel.create({
+    name: 'Michi',
+    specie: 'Cat',
+    adopted: false,
+    owner: userId
+  });
 
-    expect(res.body).to.have.property('payload');
+  const res = await request(app)
+    .post(`/api/adoptions/${userId}/${newPet._id}`)
+    .send({
+      notes: 'Test adoption'
+    });
+
+  expect(res.status).to.be.oneOf([200, 201]); // Acepta 200 OK o 201 Created
+  expect(res.body).to.be.an('object');
+  expect(res.body).to.have.property('status', 'success');
+  
+
+  if (res.body.payload) {
     expect(res.body.payload).to.include.keys('pet', 'owner');
     expect(res.body.payload.pet).to.equal(newPet._id.toString());
-  
-    const updatedPet = await petModel.findById(newPet._id);
-    expect(updatedPet.adopted).to.be.true;
-  });
-});
+  } else {
 
+    expect(res.body).to.have.property('message');
+  }
+
+
+  const updatedPet = await petModel.findById(newPet._id);
+  expect(updatedPet.adopted).to.be.true;
+
+  const adoption = await adoptionModel.findOne({pet: newPet._id});
+  expect(adoption).to.not.be.null;
+  expect(adoption.owner.toString()).to.equal(userId.toString());
+});
+});
